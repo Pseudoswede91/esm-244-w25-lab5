@@ -1,9 +1,14 @@
 ---
 title: 'ESM 244 Lab 5 Key: Clustering'
+author: Reeves Erickson
+format: 
+  html:
+    code-fold: show
+    embed-resources: true
 execute:
-  eval: false
+  message: false
+  warning: false
 ---
-
 
 In this lab, you'll learn how to do some cluster exploration by partition-based (k-means) and hierarchical clustering.
 
@@ -57,8 +62,10 @@ All of these parameters were real-valued continuous.
 This data is in a different format than we are used to.  It is a text file, rather than csv; the columns are separated by tabs, not commas. R can handle this no problem with a new function to load in the data.
 
 ```{r}
-seeds_df <- read_tsv(here::here('data','seeds_dataset.txt'))
+seeds_df <- read_tsv(here::here('data','seeds_dataset.txt')) #note that this is read_tsv, which is reading a "tab separated values"
+#here::here is a "lazy load". instead of installing the whole package and using more memory on your computer, you can dip in and use just the "here" function.
 
+seeds_df
 ```
 
 Uh-oh, the column names look strange. Why are there no column names?  We can tell R that there are no column names in the `read_tsv()`, but we'll need to manually add them in based on our reading of the metadata. Let's start by making a vector for the names. Notice the order of the vector matters in the placement of the column names. First index goes to first column.
@@ -73,7 +80,8 @@ temp<-read_tsv(here::here('data','seeds_dataset.txt'),
 
 In your console use `summary(temp)` to examine the structure of the data. Does anything look strange?
 
-
+A: There are extremely low values that are essentially "na's". the original data scientist didn't have an NA in their system, so they had to put something in for the values. We need to find a way to transform the -999's into NA values.
+The variety is 1, which is a numerical value. it needs to be a factor.
 
 
 
@@ -82,12 +90,16 @@ Hopefully you caught two pieces that need to be fixed. First, why are there so m
 ```{r}
 seeds_df <- read_tsv(here::here('data','seeds_dataset.txt'),
                      col_names = FALSE,
-                     na = '-999') %>%
+                     na = '-999') %>% #using read_whatever commands, you can put NA's in!
   setNames(var_names) %>%
-  mutate(variety = case_when(variety == 1 ~ 'Kama',
-                             variety == 2 ~ 'Rosa',
-                             variety == 3 ~ 'Canadian',
-                             TRUE ~ 'oops'))
+  mutate(variety = case_when(variety == 1 ~ 'Kama', #"in the column variety, if the value is exactly 1, change it to Kama
+                             variety == 2 ~ 'Rosa',# the same but Rosa
+                             variety == 3 ~ 'Canadian', #the same but Canada
+                             TRUE ~ 'oops')) #if it's anyhting else, put "oops"
+
+# A Case_When Function allows the above to happen.
+
+
 ```
 
 
@@ -104,13 +116,28 @@ I want you to create three exploratory visuals to help you understand the data a
 
 You can always make more if you want. 
 
+```{r}
+# make a histogram of the distribution of each numeric variable (hint: pivot the data longer first and use facet_grid as a layer in your ggplot)
 
+histogram<-seeds_df %>% 
+  pivot_longer(cols = -variety)
+  ggplot(histogram, aes(x = value))+
+    geom_histogram()+
+    facet_grid(variety ~ name, scales = 'free')
+```
 
+```{r}
+#2) A scatter plot of with kernel area on the x-axis and asymmetry coefficient on the y-axis. Use color, shape, or any other aesthetic to  help you see potential groupings
+ggplot(seeds_df) +
+  geom_point(aes(x = a, y = asym, color = c, shape = variety),
+             size = 3, alpha = 0.7)
 
+# try other variations: 3) A scatter plot with length of kernel groove on the x-axis and width of kernel on y-axis.
 
-
-
-
+ggplot(seeds_df) +
+  geom_point(aes(x = l_g, y = w_k, color = asym, shape = variety),
+             size = 3, alpha = 0.7)
+```
 
 ## Create a complete, scaled version of the data
 
@@ -118,6 +145,16 @@ Make two separate dataframes where one is the complete cases dataframe and the o
 
 Why would we want two separate dataframes instead of doing it one pipe? Why should we scale the data before going to kmeans-clustering?
 
+```{r}
+#dropped na df
+seeds_complete<-seeds_df %>% 
+  drop_na()
+
+#the complete with scaled data.
+seeds_scale<-seeds_complete %>% 
+  select(-variety) %>% 
+  scale()
+```
 
 
 
@@ -126,12 +163,11 @@ Why would we want two separate dataframes instead of doing it one pipe? Why shou
 First let's make a 'knee' plot to see the performance of kmeans with different number of clusters. Describe what each of the arguments do in the following code chunk. Interpret the results of the graph by making a figure caption in the code chunk.
 
 ```{r}
+#| fig-cap: We would select 3 groups to initiate a kmean cluster because the kink in the graph is most pronounced at t3 clusters
 
 fviz_nbclust(seeds_scale, FUNcluster = kmeans, method = 'wss', k.max = 10)
 
 ```
-
-
 
 
 Now let's have R recommend the number of clusters.
@@ -157,7 +193,8 @@ The `nbclust` package runs k-means under the hood, but doesn't provide a usuable
 ```{r}
 
 set.seed(10101)
-seeds_km <- kmeans(xxx,yyy,zzz) # kmeans specifying 3 groups to start
+seeds_km <- kmeans(seeds_scale,3, nstart=25) # kmeans specifying 3 groups to start
+
 ```
 
 
@@ -171,7 +208,24 @@ Now make a ggplot of of area on the x-axis, asymmetric coefficient on the y-axis
 ### On your own:
 ### Plot area and asymmetric index, and include cluster number and variety for comparison:
 
+# run in console
+#seeds_km$size # How many observations assigned to each cluster
+#seeds_km$cluster # What cluster each observation in seeds_scale is assigned to
 
+# Bind the cluster number to the original data used for clustering, so that we can see what cluster each variety is assigned to
+seeds_cl <- data.frame(seeds_complete, 
+                       cluster_no = factor(seeds_km$cluster))
+
+
+```
+
+```{r}
+### On your own:
+### Plot area and asymmetric index, and include cluster number and variety for comparison:
+
+ggplot(seeds_cl) +
+  geom_point(aes(x = a, y = asym, color = cluster_no, shape = variety), 
+             size = 2)
 
 ```
 
@@ -179,6 +233,17 @@ What do we see from this graph?
 
 
 Can you make a table to show the comparison between the variety and defined clusters?
+```{r}
+#| tbl-cap: consistency table for the grouping of kmeans and varietals of kernels
+
+### how well does this clustering match up to variety?  Select the variety and 
+### cluster number vars and make into a continency table
+seeds_cl %>% 
+  select(variety, cluster_no) %>% 
+  table() %>% 
+#how can we make this table look beautiful in quarto? Can allso do the table-cap up above
+  knitr::kable()
+```
 
 
 
@@ -202,21 +267,32 @@ wb_env <- read_csv(here::here("data","wb_env.csv"))
 ```
 
 
+Write pseudocode for what we will need to do for heirarchal clustering:
+1) slice the top 20 emitters
 
-Write pseducode for what we will need to do for heirarchal clustering
+2) drap nas (note that we don't have any)
 
+3) select only the numeric
 
+4) scale the data
+
+5) get the distance of the scaled data
+
+6) run hclust
+
+7) think about what linkages we want (either single or complete)
+
+8) make our dendrograms
 
 
 ## Wrangle the data
 
 ```{r}
-#| eval: false
 
 # Only keep top 20 greenhouse gas emitters (for simplifying visualization here...)
 wb_ghg_20 <- wb_env %>% 
+  slice_max(ghg, n=20)
   
-
 ```
 
 ## Scale the data
@@ -224,8 +300,12 @@ wb_ghg_20 <- wb_env %>%
 ```{r}
 # Scale the numeric variables (columns 3:7)
 wb_scaled <- wb_ghg_20 %>% 
+  select(3:7) %>% #this is hard coding, not relative coding. relative would be (-c(name,region))
+
+  scale()
 
 
+# Update to add rownames (country name) from wb_ghg_20
 rownames(wb_scaled) <- wb_ghg_20$name
 
 ```
@@ -236,7 +316,8 @@ rownames(wb_scaled) <- wb_ghg_20$name
 Use the `stats::dist()` function to find the Euclidean distance in multivariate space between the different observations (countries):
 
 ```{r}
-
+# Compute dissimilarity values (Euclidean distances):
+euc_distance <- dist(wb_scaled, method = "euclidean") 
 ```
 
 
@@ -267,6 +348,13 @@ Let's update the linkage to single linkage (recall from lecture: this means that
 ```{r}
 
 # Make single cluster here and plot it
+hc_single<- hclust(euc_distance, method = 'single')
+
+#plotting
+p_single<-ggdendrogram(hc_single,
+                       rotate=TRUE)+
+  theme_minimal()+
+  labs(x="country")
 
 ```
 
@@ -276,10 +364,10 @@ Use patchwork to compare the two outputs and add a descriptive figure caption to
 
 ```{r}
 
+p_complete+p_single
 ```
-
-
-
+In Single, Sudan and CAR are off on their own. In complete, they're mixed in. In complete, the US and China are mixed in together
+The interpretation is more difficult than running the clustering. 
 
 
 # Extras:
@@ -292,11 +380,16 @@ We can cluster the groupings by pruning the dendrogram using the `cutree` functi
 # Prune the dendrogram to show only the top 5 clusters
 hc_cut <- cutree(hc_complete, k = 5)
 
-# Add cluster number to the data
 
+
+# Add cluster number to the data
+#mutate and add vector on to our original dataframe
 wb_ghg_20 <- wb_ghg_20 %>% 
   mutate(cluster = hc_cut)
 
+
+
+#make a plot with these groupings
 ggplot(wb_ghg_20, aes(x = reorder(name, cluster), y = ghg, fill = factor(cluster))) +
   geom_col() +
   coord_flip() +
